@@ -12,6 +12,11 @@ LazyData: true
 Imports: 
     DBI,
     dplyr,
+    musicassessrdb (>= 0.1.0),
     shiny,
     shinycssloaders
 RoxygenNote: 7.3.1
+URL: https://github.com/sebsilas/dbpoll
+BugReports: https://github.com/sebsilas/dbpoll/issues
+Remotes:  
+    sebsilas/musicassessrdb
