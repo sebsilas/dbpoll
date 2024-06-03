@@ -45,7 +45,7 @@ run_dbpoll <- function() {
     # This has to be defined within the server function
     get_trials <- function() {
 
-      shiny::req(input$no_trials)
+      shiny::req(input$no_trials && DBI::dbIsValid(db_con) )
 
       trials <- dplyr::tbl(db_con, "trials") %>%
         dplyr::slice_max(trial_id, n = input$no_trials)
@@ -92,8 +92,22 @@ run_dbpoll <- function() {
 
       shiny::req(cols_to_show)
 
-      data() %>%
-        dplyr::select(dplyr::all_of(cols_to_show))
+      data <- data() %>%
+        dplyr::select(dplyr::all_of(cols_to_show)) %>%
+        dplyr::collect()
+
+      if("trial_time_completed" %in% cols_to_show) {
+        data <- data %>%
+          dplyr::mutate(trial_time_completed = format(lubridate::as_datetime(trial_time_completed), format = "%H:%M:%S %d/%m/%Y"))
+      }
+
+      if("trial_time_started" %in% cols_to_show) {
+        data <- data %>%
+          dplyr::mutate(trial_time_started = format(lubridate::as_datetime(trial_time_started), format = "%H:%M:%S %d/%m/%Y"))
+      }
+
+      data
+
     })
 
 
