@@ -1,5 +1,11 @@
 
 
+#' Run log monitor app
+#'
+#' @return
+#' @export
+#'
+#' @examples
 run_log_monitor <- function() {
 
   # Define the UI
