@@ -14,6 +14,7 @@ run_log_monitor <- function() {
     shiny::selectInput("app", "App", choices = character(0)),
     shiny::actionButton("refresh_logs", "Refresh logs"),
     DT::DTOutput("log_table"),
+    shiny::uiOutput("log_name"),
     shiny::verbatimTextOutput("log_content")
 
   )
@@ -32,6 +33,7 @@ run_log_monitor <- function() {
     }) %>% shiny::bindEvent(input$refresh_logs)
 
 
+
     apps <- shiny::reactive({
       logs() %>%
         dplyr::pull(App) %>%
@@ -43,25 +45,42 @@ run_log_monitor <- function() {
       shiny::updateSelectInput(session, "app", choices = apps())
     })
 
+    log_data <- shiny::reactive({
+      logs() %>%
+        dplyr::filter(App %in% input$app)
+    })
+
     output$log_table <- DT::renderDT({
 
       shiny::req(input$app)
       shiny::req(logs())
 
-      logs() %>%
-        dplyr::filter(App %in% input$app)
+      log_data()
+
     }, selection = 'single')
 
 
+    selected_log_file <- shiny::reactive({
+
+      selected_row <- input$log_table_rows_selected
+
+      if (length(selected_row)) {
+        selected_log_file <- log_data()$log_file[selected_row]
+        log_file_path <- file.path(Sys.getenv("LOG_LOC"), '/', selected_log_file)
+      } else {
+        log_file_path <- ''
+      }
+      log_file_path
+    })
+
+    output$log_name <- shiny::renderUI({
+      shiny::tags$p(shiny::tags$strong(basename(selected_log_file())))
+    })
 
     output$log_content <- shiny::renderText({
-      selected_row <- input$log_table_rows_selected
-      if (length(selected_row)) {
-        selected_log_file <- logs()$log_file[selected_row]
-        log_file_path <- file.path(Sys.getenv("LOG_LOC"), '/', selected_log_file)
-        log_content <- readr::read_file(log_file_path)
-        return(log_content)
-      }
+
+      readr::read_file(selected_log_file())
+
     }) %>% shiny::bindEvent(input$log_table_rows_selected)
 
 
