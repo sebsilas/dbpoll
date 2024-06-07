@@ -32,10 +32,11 @@ run_dbpoll <- function() {
       shiny::numericInput("no_trials", "Number of trials to show:", value = 5, min = 1, max = 100),
       shiny::checkboxInput("join_item_data", "Join item data on?"),
       shiny::selectInput("cols_to_show", "Columns to show", choices = character(0), multiple = TRUE, width = 500),
-      shiny::actionButton("update_names", "Update column names")
+      shiny::actionButton("update_names", "Update column names"),
+      shiny::checkboxInput("poll_db", "Poll DB?", value = TRUE)
       ),
 
-    shiny::tableOutput("db_table")
+    DT::DTOutput("db_table")
 
   )
 
@@ -45,7 +46,7 @@ run_dbpoll <- function() {
     # This has to be defined within the server function
     get_trials <- function() {
 
-      shiny::req(input$no_trials && DBI::dbIsValid(db_con) )
+      shiny::req(input$no_trials && DBI::dbIsValid(db_con) && input$poll_db)
 
       trials <- dplyr::tbl(db_con, "trials") %>%
         dplyr::slice_max(trial_id, n = input$no_trials)
@@ -65,6 +66,15 @@ run_dbpoll <- function() {
       return(trials)
     }
 
+
+    last_data <- shiny::reactiveVal(NULL)
+
+    shiny::observe({
+      if (input$poll_db) {
+        last_data(data())
+      }
+    })
+
     data <- shiny::reactivePoll(2000, session,
                          # In this case the check and value functions are the same
                          checkFunc = get_trials,
@@ -77,11 +87,11 @@ run_dbpoll <- function() {
 
     col_names_inited <- reactiveVal(FALSE)
 
-    output$db_table <- shiny::renderTable({
+    output$db_table <- DT::renderDT({
 
       cols_to_show <- input$cols_to_show
 
-      shiny::req(data())
+      shiny::req(last_data())
 
 
       if(!col_names_inited()) {
@@ -92,7 +102,7 @@ run_dbpoll <- function() {
 
       shiny::req(cols_to_show)
 
-      data <- data() %>%
+      data <- last_data() %>%
         dplyr::select(dplyr::all_of(cols_to_show)) %>%
         dplyr::collect()
 
