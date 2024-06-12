@@ -133,7 +133,8 @@ run_dbpoll <- function() {
       logging::logwarn("Removing any columns which have all NAs...")
 
       data %>%
-        dplyr::select(dplyr::where(~ !all(is.na(.))))
+        dplyr::select(dplyr::where(~ !all(is.na(.)))) %>%
+        dplyr::arrange(dplyr::desc(trial_id))
 
     })
 
