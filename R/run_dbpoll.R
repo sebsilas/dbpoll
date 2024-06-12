@@ -51,11 +51,25 @@ run_dbpoll <- function() {
       trials <- dplyr::tbl(db_con, "trials") %>%
         dplyr::slice_max(trial_id, n = input$no_trials)
 
+      trial_ids <- trials %>%
+        dplyr::pull(trial_id)
+
+      scores_trials <- dplyr::tbl(db_con, "scores_trial") %>%
+        dplyr::filter(measure == "opti3",
+                      trial_id %in% trial_ids) %>%
+        dplyr::select(-measure) %>%
+        dplyr::rename(opti3 = score)
+
+      trials <- trials %>%
+        dplyr::left_join(scores_trials, by = "trial_id")
+
+
       if(input$join_item_data) {
 
         item_banks <- trials %>%
           dplyr::pull(item_id) %>%
           musicassessrdb::get_item_bank_names(db_con = db_con)
+
 
         trials <- trials %>%
           musicassessrdb::left_join_on_items(db_con,
@@ -116,7 +130,10 @@ run_dbpoll <- function() {
           dplyr::mutate(trial_time_started = format(lubridate::as_datetime(trial_time_started), format = "%H:%M:%S %d/%m/%Y"))
       }
 
-      data
+      logging::logwarn("Removing any columns which have all NAs...")
+
+      data %>%
+        dplyr::select(dplyr::where(~ !all(is.na(.))))
 
     })
 
