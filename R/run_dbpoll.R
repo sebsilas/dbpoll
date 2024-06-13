@@ -55,10 +55,17 @@ run_dbpoll <- function() {
         dplyr::pull(trial_id)
 
       scores_trials <- dplyr::tbl(db_con, "scores_trial") %>%
-        dplyr::filter(measure == "opti3",
+        dplyr::filter(measure %in% c("opti3",
+                                   "change_across_all_sessions", "no_times_practised", "avg_no_attempts",
+                                   "avg_change_across_attempts", "gradient_across_all_scores", "item_intercept",
+                                   "learned_in_current_session", "last_score", "last_score_completed",
+                                   "change_in_score_from_last_session", "increase_since_last_session",
+                                   "time_since_last_item_studied"),
                       trial_id %in% trial_ids) %>%
-        dplyr::select(-measure) %>%
-        dplyr::rename(opti3 = score)
+        tidyr::pivot_wider(names_from = "measure", values_from = "score") %>%
+        dplyr::select(-scores_trial_id)
+
+      #print(scores_trials)
 
       trials <- trials %>%
         dplyr::left_join(scores_trials, by = "trial_id")
@@ -89,7 +96,7 @@ run_dbpoll <- function() {
       }
     })
 
-    data <- shiny::reactivePoll(2000, session,
+    data <- shiny::reactivePoll(5000, session,
                          # In this case the check and value functions are the same
                          checkFunc = get_trials,
                          valueFunc = get_trials)
