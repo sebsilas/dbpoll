@@ -61,11 +61,13 @@ run_dbpoll <- function() {
                                    "learned_in_current_session", "last_score", "last_score_completed",
                                    "change_in_score_from_last_session", "increase_since_last_session",
                                    "time_since_last_item_studied"),
-                      trial_id %in% trial_ids) %>%
-        tidyr::pivot_wider(names_from = "measure", values_from = "score") %>%
-        dplyr::select(-scores_trial_id)
+                      trial_id %in% trial_ids)  %>%
+        dplyr::select(-scores_trial_id) %>%
+        tidyr::pivot_wider(names_from = "measure", values_from = "score")
 
       #print(scores_trials)
+
+      browser()
 
       trials <- trials %>%
         dplyr::left_join(scores_trials, by = "trial_id")
