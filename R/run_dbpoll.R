@@ -33,7 +33,8 @@ run_dbpoll <- function() {
       shiny::checkboxInput("join_item_data", "Join item data on?"),
       shiny::selectInput("cols_to_show", "Columns to show", choices = character(0), multiple = TRUE, width = 500),
       shiny::actionButton("update_names", "Update column names"),
-      shiny::checkboxInput("poll_db", "Poll DB?", value = TRUE)
+      shiny::checkboxInput("automatically_poll_db", "Automatically poll DB?", value = FALSE),
+      shiny::actionButton("refresh_db", "Manual refresh")
       ),
 
     DT::DTOutput("db_table")
@@ -46,7 +47,7 @@ run_dbpoll <- function() {
     # This has to be defined within the server function
     get_trials <- function() {
 
-      shiny::req(input$no_trials && DBI::dbIsValid(db_con) && input$poll_db)
+    shiny::req(input$no_trials && DBI::dbIsValid(db_con))
 
       trials <- dplyr::tbl(db_con, "trials") %>%
         dplyr::slice_max(trial_id, n = input$no_trials)
@@ -56,18 +57,15 @@ run_dbpoll <- function() {
 
       scores_trials <- dplyr::tbl(db_con, "scores_trial") %>%
         dplyr::filter(measure %in% c("opti3",
-                                   "change_across_all_sessions", "no_times_practised", "avg_no_attempts",
-                                   "avg_change_across_attempts", "gradient_across_all_scores", "item_intercept",
-                                   "learned_in_current_session", "last_score", "last_score_completed",
-                                   "change_in_score_from_last_session", "increase_since_last_session",
-                                   "time_since_last_item_studied"),
+                                     "change_across_all_sessions", "no_times_practised", "avg_no_attempts",
+                                     "avg_change_across_attempts", "gradient_across_all_scores", "item_intercept",
+                                     "learned_in_current_session", "last_score", "last_score_completed",
+                                     "change_in_score_from_last_session", "increase_since_last_session",
+                                     "time_since_last_item_studied"),
                       trial_id %in% trial_ids)  %>%
         dplyr::select(-scores_trial_id) %>%
         tidyr::pivot_wider(names_from = "measure", values_from = "score")
 
-      #print(scores_trials)
-
-      browser()
 
       trials <- trials %>%
         dplyr::left_join(scores_trials, by = "trial_id")
@@ -75,34 +73,31 @@ run_dbpoll <- function() {
 
       if(input$join_item_data) {
 
-        item_banks <- trials %>%
-          dplyr::pull(item_id) %>%
-          musicassessrdb::get_item_bank_names(db_con = db_con)
-
-
-        trials <- trials %>%
-          musicassessrdb::left_join_on_items(db_con,
-                                             item_banks = item_banks,
-                                             df_with_item_ids = .)
+        trials <- musicassessrdb::left_join_on_items(db_con, trials)
       }
 
       return(trials)
+
     }
 
 
     last_data <- shiny::reactiveVal(NULL)
 
     shiny::observe({
-      if (input$poll_db) {
+      if (input$automatically_poll_db) {
         last_data(data())
       }
     })
+
+    # Manual updates
+    shiny::observe({
+        last_data(get_trials())
+    }) %>% shiny::bindEvent(input$refresh_db)
 
     data <- shiny::reactivePoll(5000, session,
                          # In this case the check and value functions are the same
                          checkFunc = get_trials,
                          valueFunc = get_trials)
-
 
     col_names <- shiny::reactive({
       names(dplyr::collect(data()))
@@ -126,7 +121,7 @@ run_dbpoll <- function() {
       shiny::req(cols_to_show)
 
       data <- last_data() %>%
-        dplyr::select(dplyr::all_of(cols_to_show)) %>%
+        dplyr::select(dplyr::any_of(cols_to_show)) %>%
         dplyr::collect()
 
       if("trial_time_completed" %in% cols_to_show) {
@@ -165,7 +160,9 @@ run_dbpoll <- function() {
            server = server,
            onStart = function() {
 
-             db_con <<- musicassessrdb::musicassessr_con()
+             prod <- Sys.getenv("PROD_VS_DEV") == "prod"
+
+             db_con <<- musicassessrdb::musicassessr_con(prod = prod)
 
            })
 
