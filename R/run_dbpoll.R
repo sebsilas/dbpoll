@@ -160,9 +160,7 @@ run_dbpoll <- function() {
            server = server,
            onStart = function() {
 
-             prod <- Sys.getenv("PROD_VS_DEV") == "prod"
-
-             db_con <<- musicassessrdb::musicassessr_con(prod = prod)
+             db_con <<- musicassessrdb::musicassessr_con()
 
            })
 
