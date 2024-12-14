@@ -1,5 +1,3 @@
-
-
 run_dbpoll <- function() {
 
   # Define the UI
@@ -11,32 +9,36 @@ run_dbpoll <- function() {
                       }
 
                       .form-group.shiny-input-container, .form-group.shiny-input-checkbox {
-      display: flex;
-      align-items: center;
-      float: left;
-      margin: 0 20px 0 0;
-    }
-    .form-group.shiny-input-container label, .form-group.shiny-input-checkbox label {
-      margin-right: 10px;
-      margin-bottom: 0; /* Ensure no extra margin at the bottom */
-    }
-    .form-group.shiny-input-container input, .form-group.shiny-input-checkbox input {
-      flex: 1; /* Allow input to take available space */
-    }
+                        display: flex;
+                        align-items: center;
+                        float: left;
+                        margin: 0 20px 0 0;
+                      }
+                      .form-group.shiny-input-container label, .form-group.shiny-input-checkbox label {
+                        margin-right: 10px;
+                        margin-bottom: 0;
+                      }
+                      .form-group.shiny-input-container input, .form-group.shiny-input-checkbox input {
+                        flex: 1;
+                      }
                       '),
 
     # Application title
     shiny::titlePanel("musicassessr trial monitor"),
 
     shiny::tags$div(id = "topSection",
-      shiny::numericInput("no_trials", "Number of trials to show:", value = 5, min = 1, max = 100),
-      shiny::checkboxInput("join_item_data", "Join item data on?"),
-      shiny::selectInput("cols_to_show", "Columns to show", choices = character(0), multiple = TRUE, width = 500),
-      shiny::actionButton("update_names", "Update column names"),
-      shiny::checkboxInput("automatically_poll_db", "Automatically poll DB?", value = FALSE),
-      shiny::actionButton("refresh_db", "Manual refresh")
-      ),
+                    shiny::numericInput("no_trials", "Number of trials to show:", value = 5, min = 1, max = 100),
+                    shiny::checkboxInput("join_item_data", "Join item data on?"),
+                    shiny::selectInput("cols_to_show", "Columns to show", choices = character(0), multiple = TRUE, width = 500),
+                    shiny::actionButton("update_names", "Update column names"),
+                    shiny::checkboxInput("automatically_poll_db", "Automatically poll DB?", value = FALSE),
+                    shiny::actionButton("refresh_db", "Manual refresh")
+    ),
 
+    # Audio player section
+    shiny::uiOutput("audio_player"),
+
+    # DataTable section
     DT::DTOutput("db_table")
 
   )
@@ -47,7 +49,7 @@ run_dbpoll <- function() {
     # This has to be defined within the server function
     get_trials <- function() {
 
-    shiny::req(input$no_trials && DBI::dbIsValid(db_con))
+      shiny::req(input$no_trials && DBI::dbIsValid(db_con))
 
       trials <- dplyr::tbl(db_con, "trials") %>%
         dplyr::slice_max(trial_id, n = input$no_trials)
@@ -66,20 +68,16 @@ run_dbpoll <- function() {
         dplyr::select(-scores_trial_id) %>%
         tidyr::pivot_wider(names_from = "measure", values_from = "score")
 
-
       trials <- trials %>%
         dplyr::left_join(scores_trials, by = "trial_id")
 
-
       if(input$join_item_data) {
-
         trials <- musicassessrdb::left_join_on_items(db_con, trials)
       }
 
       return(trials)
 
     }
-
 
     last_data <- shiny::reactiveVal(NULL)
 
@@ -91,13 +89,13 @@ run_dbpoll <- function() {
 
     # Manual updates
     shiny::observe({
-        last_data(get_trials())
+      last_data(get_trials())
     }) %>% shiny::bindEvent(input$refresh_db)
 
     data <- shiny::reactivePoll(5000, session,
-                         # In this case the check and value functions are the same
-                         checkFunc = get_trials,
-                         valueFunc = get_trials)
+                                # In this case the check and value functions are the same
+                                checkFunc = get_trials,
+                                valueFunc = get_trials)
 
     col_names <- shiny::reactive({
       names(dplyr::collect(data()))
@@ -105,18 +103,19 @@ run_dbpoll <- function() {
 
     col_names_inited <- reactiveVal(FALSE)
 
+    # Separate reactive value for selected audio file
+    selected_audio_file <- shiny::reactiveVal(NULL)
+
     output$db_table <- DT::renderDT({
 
       cols_to_show <- input$cols_to_show
 
       shiny::req(last_data())
 
-
       if(!col_names_inited()) {
         shiny::updateSelectInput(inputId = "cols_to_show", choices = col_names(), selected = col_names() )
         col_names_inited(TRUE)
       }
-
 
       shiny::req(cols_to_show)
 
@@ -140,31 +139,56 @@ run_dbpoll <- function() {
         dplyr::select(dplyr::where(~ !all(is.na(.)))) %>%
         dplyr::arrange(dplyr::desc(trial_id))
 
+    }, selection = 'single')
+
+    shiny::observeEvent(input$db_table_rows_selected, {
+
+      shiny::req(input$db_table_rows_selected)
+
+      selected_row <- last_data() %>%
+        dplyr::collect() %>%
+        dplyr::slice(input$db_table_rows_selected)
+
+      selected_audio_file(selected_row$audio_file)
     })
 
+    output$audio_player <- shiny::renderUI({
+
+      audio_file <- selected_audio_file()
+
+      if (!is.null(audio_file) && nzchar(audio_file)) {
+
+        if(Sys.getenv("MUSICASSESSR_DB_NAME") == 'melody_prod') {
+          audio_file <- paste0("https://musicassessr-media-source.s3.eu-central-1.amazonaws.com/", audio_file)
+        } else if(Sys.getenv("MUSICASSESSR_DB_NAME") == 'melody_dev') {
+          audio_file <- paste0("https://shinny-app-source-41630.s3.us-east-1.amazonaws.com/", audio_file)
+        }
+
+        shiny::tags$audio(controls = TRUE, shiny::tags$source(src = audio_file, type = "audio/wav"))
+      } else {
+        "No audio file selected."
+      }
+    })
 
     shiny::observe({
       shiny::updateSelectInput(inputId = "cols_to_show", choices = col_names(), selected = col_names() )
     }) %>% shiny::bindEvent(input$update_names)
 
-
     session$onSessionEnded(function() {
-      logging::loginfo("Disconnecting from DB")
-      musicassessrdb::db_disconnect(db_con)
+      if(DBI::dbIsValid(db_con)) {
+        logging::loginfo("Disconnecting from DB")
+        musicassessrdb::db_disconnect(db_con)
+      }
+
     })
 
   }
 
   # Create the Shiny app object
   shiny::shinyApp(ui = ui,
-           server = server,
-           onStart = function() {
-
-             db_con <<- musicassessrdb::musicassessr_con()
-
-           })
+                  server = server,
+                  onStart = function() {
+                    db_con <<- musicassessrdb::musicassessr_con()
+                  })
 
 }
-
-
-
