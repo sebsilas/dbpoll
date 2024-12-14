@@ -150,7 +150,7 @@ run_dbpoll <- function() {
 
     session$onSessionEnded(function() {
       logging::loginfo("Disconnecting from DB")
-      DBI::dbDisconnect(db_con)
+      musicassessrdb::db_disconnect(db_con)
     })
 
   }
