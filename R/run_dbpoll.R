@@ -205,12 +205,13 @@ run_dbpoll <- function() {
     }) %>% shiny::bindEvent(input$update_names)
 
     session$onSessionEnded(function() {
-      con <- db_con()
+      con <- isolate(db_con())  # Extracts the non-reactive value safely
       if (!is.null(con) && DBI::dbIsValid(con)) {
         logging::loginfo("Disconnecting from DB")
         musicassessrdb::db_disconnect(con)
       }
     })
+
 
   }
 
